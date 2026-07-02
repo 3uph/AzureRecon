@@ -1,18 +1,16 @@
 # AzureRecon
 
-Lightweight recon tool for testing Azure AD and Entra ID during authorized engagements. OPSEC first, defaults to stealth techniques with no sign-in logs and warns before anything loud. Email enumeration, MFA detection, password spraying and bruteforce with lockout protection.
-
 > **This tool is intended for authorized red team operations and internal security audits only.** Unauthorized use against systems you do not own or have explicit permission to test is illegal and unethical.
 
 ## Features
 
-- **Email Enumeration** — check if emails exist in a Microsoft tenant without sending passwords or generating any sign-in log
-- **MFA Detection** — identify which accounts have MFA enabled, Conditional Access policies, or no second factor at all
-- **Password Spraying** — one password across many users per round, with configurable cooldown between rounds to avoid Smart Lockout
-- **Bruteforce** — multiple passwords against one or more users, auto-stops on lockout detection
-- **OPSEC Warnings** — the tool tells you exactly what will be visible to the blue team before every loud action, and asks for confirmation
-- **Visual Output** — color-coded results with status badges, progress tracking, countdown timers and a detailed summary table
-- **Output Formats** — terminal, plain text file, or JSON
+- **Email Enumeration** - check if emails exist in a Microsoft tenant without sending passwords or generating any sign-in log
+- **MFA Detection** - identify which accounts have MFA enabled, Conditional Access policies, or no second factor at all
+- **Password Spraying** - one password across many users per round, with configurable cooldown between rounds to avoid Smart Lockout
+- **Bruteforce** - multiple passwords against one or more users, auto-stops on lockout detection
+- **OPSEC Warnings** - the tool tells you exactly what will be visible to the blue team before every loud action, and asks for confirmation
+- **Visual Output** - color-coded results with status badges, progress tracking, countdown timers and a detailed summary table
+- **Output Formats** - terminal, plain text file, or JSON
 
 ## OPSEC
 
